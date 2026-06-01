@@ -1,0 +1,57 @@
+{
+  "$schema": "./schemas/repo-source-of-truth.schema.json",
+  "project": {
+    "name": "PROJECT_NAME",
+    "purpose": "One sentence describing what this project does.",
+    "status": "active",
+    "primaryAudience": []
+  },
+  "sourceOfTruth": {
+    "behaviorContract": "AGENTS.md",
+    "durableNotes": "WORKING_NOTES.md",
+    "deploymentLog": "DEPLOYMENT_LOG.md",
+    "envAudit": "SAFE_ENV_AUDIT.md"
+  },
+  "contextMinimizer": {
+    "readFirst": [
+      "AGENTS.md",
+      "REPO_SOURCE_OF_TRUTH.json",
+      "WORKING_NOTES.md"
+    ],
+    "doNotLoadByDefault": [
+      ".git",
+      "node_modules",
+      "dist",
+      "build",
+      ".next",
+      "coverage",
+      "large logs",
+      "generated artifacts"
+    ],
+    "searchFirst": [
+      "rg --files",
+      "rg -n \"keyword\""
+    ],
+    "contextRules": [
+      "Load only files directly related to the task.",
+      "Summarize long logs before saving them.",
+      "Move resolved incidents into archive.",
+      "Store credential names and roles only."
+    ]
+  },
+  "verification": {
+    "defaultCommands": [],
+    "releaseChecks": []
+  },
+  "secrets": {
+    "policy": "Store names and roles only. Never store values.",
+    "allowedExamples": [],
+    "forbiddenExamples": [
+      "actual tokens",
+      "private keys",
+      "passwords",
+      "customer PII"
+    ]
+  }
+}
+

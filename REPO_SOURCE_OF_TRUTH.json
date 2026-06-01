@@ -1,0 +1,77 @@
+{
+  "$schema": "./schemas/repo-source-of-truth.schema.json",
+  "project": {
+    "name": "AiML SuperAgent",
+    "purpose": "A token-efficient operating framework for AI coding assistants.",
+    "status": "private-release-candidate",
+    "primaryAudience": [
+      "software teams using AI coding assistants",
+      "solo builders managing long-running projects",
+      "agent framework authors"
+    ]
+  },
+  "sourceOfTruth": {
+    "behaviorContract": "AGENTS.md",
+    "durableNotes": "WORKING_NOTES.md",
+    "templates": "templates/",
+    "docs": "docs/",
+    "examples": "examples/",
+    "privateNpmPublishing": "docs/npm-private-publishing.md"
+  },
+  "contextMinimizer": {
+    "readFirst": [
+      "AGENTS.md",
+      "REPO_SOURCE_OF_TRUTH.json",
+      "WORKING_NOTES.md"
+    ],
+    "doNotLoadByDefault": [
+      ".git",
+      "node_modules",
+      "dist",
+      "build",
+      ".next",
+      "coverage",
+      "generated artifacts",
+      "large logs",
+      "resolved incidents",
+      "old screenshots",
+      "unrelated archives"
+    ],
+    "searchFirst": [
+      "rg --files",
+      "rg -n \"keyword\""
+    ],
+    "contextRules": [
+      "Load only files directly related to the current task.",
+      "Summarize long logs before saving them to notes.",
+      "Move resolved incidents into dated archives.",
+      "Keep secrets out of notes; store names and roles only."
+    ]
+  },
+  "verification": {
+    "defaultCommands": [
+      "npm run check"
+    ],
+    "releaseChecks": [
+      "no real secrets in docs or examples",
+      "all templates are copy-safe",
+      "checker passes",
+      "README links resolve",
+      "npm private scope confirmed before removing private:true"
+    ]
+  },
+  "secrets": {
+    "policy": "Store variable names and roles only. Never store values.",
+    "allowedExamples": [
+      "DATABASE_URL",
+      "OPENAI_API_KEY",
+      "VERCEL_PROJECT_ID"
+    ],
+    "forbiddenExamples": [
+      "actual tokens",
+      "private keys",
+      "password hashes tied to real users",
+      "customer data"
+    ]
+  }
+}

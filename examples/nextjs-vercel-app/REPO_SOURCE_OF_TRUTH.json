@@ -1,0 +1,65 @@
+{
+  "$schema": "../../schemas/repo-source-of-truth.schema.json",
+  "project": {
+    "name": "Example Next.js Vercel App",
+    "purpose": "Demonstrate AiML SuperAgent memory for a deployed web app.",
+    "status": "example",
+    "primaryAudience": [
+      "web app teams"
+    ]
+  },
+  "sourceOfTruth": {
+    "behaviorContract": "AGENTS.md",
+    "durableNotes": "WORKING_NOTES.md",
+    "deploymentLog": "DEPLOYMENT_LOG.md",
+    "envAudit": "SAFE_ENV_AUDIT.md"
+  },
+  "contextMinimizer": {
+    "readFirst": [
+      "AGENTS.md",
+      "REPO_SOURCE_OF_TRUTH.json",
+      "WORKING_NOTES.md"
+    ],
+    "doNotLoadByDefault": [
+      ".git",
+      "node_modules",
+      ".next",
+      "dist",
+      "coverage",
+      "large logs",
+      "old screenshots"
+    ],
+    "searchFirst": [
+      "rg --files",
+      "rg -n \"route|env|api|middleware\""
+    ],
+    "contextRules": [
+      "Open route files only after search identifies them.",
+      "Verify production route headers with curl before claiming deploy success.",
+      "Store env var names and roles only."
+    ]
+  },
+  "verification": {
+    "defaultCommands": [
+      "npm run build"
+    ],
+    "releaseChecks": [
+      "curl -sSI https://example.com returns 200",
+      "no secret values in repo"
+    ]
+  },
+  "secrets": {
+    "policy": "Store names and roles only. Never store values.",
+    "allowedExamples": [
+      "DATABASE_URL",
+      "VERCEL_PROJECT_ID",
+      "OPENAI_API_KEY"
+    ],
+    "forbiddenExamples": [
+      "actual tokens",
+      "database URLs with passwords",
+      "private keys"
+    ]
+  }
+}
+

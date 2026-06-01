@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aimlsuperagent.com/schemas/repo-source-of-truth.schema.json",
+  "title": "AiML SuperAgent Repo Source Of Truth",
+  "type": "object",
+  "required": [
+    "project",
+    "sourceOfTruth",
+    "contextMinimizer",
+    "verification",
+    "secrets"
+  ],
+  "properties": {
+    "project": {
+      "type": "object",
+      "required": [
+        "name",
+        "purpose",
+        "status"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "purpose": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "primaryAudience": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "sourceOfTruth": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "contextMinimizer": {
+      "type": "object",
+      "required": [
+        "readFirst",
+        "doNotLoadByDefault",
+        "searchFirst",
+        "contextRules"
+      ],
+      "properties": {
+        "readFirst": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "doNotLoadByDefault": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "searchFirst": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "contextRules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "properties": {
+        "defaultCommands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "releaseChecks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "required": [
+        "policy"
+      ],
+      "properties": {
+        "policy": {
+          "type": "string"
+        },
+        "allowedExamples": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "forbiddenExamples": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
+
