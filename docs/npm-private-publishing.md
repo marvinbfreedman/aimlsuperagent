@@ -100,7 +100,7 @@ npm recommends Trusted Publishing for automation and CI/CD. This repository incl
 .github/workflows/npm-publish.yml
 ```
 
-Configure the trusted publisher in npm package settings:
+Trusted Publishing is configured for this package:
 
 - Provider: GitHub Actions
 - Organization or user: `marvinbfreedman`
@@ -108,7 +108,7 @@ Configure the trusted publisher in npm package settings:
 - Workflow filename: `npm-publish.yml`
 - Allowed action: `npm publish`
 
-After that, use GitHub Actions > Publish npm package > Run workflow. The workflow uses GitHub OIDC instead of a long-lived `NPM_TOKEN`.
+Use GitHub Actions > Publish npm package > Run workflow. The workflow uses GitHub OIDC instead of a long-lived `NPM_TOKEN`.
 
 ## Install
 
