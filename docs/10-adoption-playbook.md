@@ -14,7 +14,7 @@ Run:
 
 ```bash
 npm i -D @aimlsuperagent/agent
-npx aiml-superagent check .
+npx @aimlsuperagent/agent check .
 ```
 
 Replace every placeholder before relying on the output.

@@ -25,4 +25,4 @@ jobs:
         run: npm run check:release
 
       - name: Publish
-        run: npm publish --access restricted
+        run: npm publish --access public

@@ -1,6 +1,6 @@
 {
   "name": "@aimlsuperagent/agent",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A token-efficient operating framework for AI coding assistants.",
   "type": "module",
   "bin": {
@@ -28,7 +28,7 @@
     "check:json": "node bin/aiml-superagent.js check . --json",
     "check:release": "node bin/aiml-superagent.js check . --release --strict",
     "pack:dry-run": "npm pack --dry-run --cache ./.npm-cache",
-    "prepublishOnly": "node scripts/assert-private-publish-ready.js && node bin/aiml-superagent.js check . --release --strict"
+    "prepublishOnly": "node scripts/assert-public-publish-ready.js && node bin/aiml-superagent.js check . --release --strict"
   },
   "keywords": [
     "ai",
@@ -50,7 +50,7 @@
     "node": ">=18"
   },
   "publishConfig": {
-    "access": "restricted",
+    "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
   "license": "MIT"

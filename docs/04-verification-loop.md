@@ -78,5 +78,5 @@ CLI script:
 
 ```bash
 npm i -D @aimlsuperagent/agent
-npx aiml-superagent check .
+npx @aimlsuperagent/agent check .
 ```

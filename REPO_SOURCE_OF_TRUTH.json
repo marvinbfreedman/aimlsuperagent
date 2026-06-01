@@ -3,7 +3,7 @@
   "project": {
     "name": "AiML SuperAgent",
     "purpose": "A token-efficient operating framework for AI coding assistants.",
-    "status": "private-release-candidate",
+    "status": "public-release-candidate",
     "primaryAudience": [
       "software teams using AI coding assistants",
       "solo builders managing long-running projects",
@@ -16,7 +16,7 @@
     "templates": "templates/",
     "docs": "docs/",
     "examples": "examples/",
-    "privateNpmPublishing": "docs/npm-private-publishing.md"
+    "npmPublishing": "docs/npm-publishing.md"
   },
   "contextMinimizer": {
     "readFirst": [
@@ -57,7 +57,7 @@
       "all templates are copy-safe",
       "checker passes",
       "README links resolve",
-      "npm restricted/private access confirmed before publishing"
+      "npm public access confirmed before publishing"
     ]
   },
   "secrets": {

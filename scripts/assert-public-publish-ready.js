@@ -10,8 +10,8 @@ if (pkg.name !== "@aimlsuperagent/agent") {
   failures.push("package name must be @aimlsuperagent/agent");
 }
 
-if (pkg.publishConfig?.access !== "restricted") {
-  failures.push("publishConfig.access must be restricted");
+if (pkg.publishConfig?.access !== "public") {
+  failures.push("publishConfig.access must be public");
 }
 
 if (pkg.publishConfig?.registry !== "https://registry.npmjs.org/") {
@@ -23,15 +23,15 @@ if (!pkg.bin?.["aiml-superagent"]) {
 }
 
 if (pkg.private === true) {
-  failures.push("package.json still has private:true safety brake. Confirm npm restricted/private access before publishing.");
+  failures.push("package.json still has private:true safety brake. Remove it only after public release approval.");
 }
 
 if (failures.length > 0) {
-  console.error("Private npm publish readiness failed:");
+  console.error("Public npm publish readiness failed:");
   for (const failure of failures) {
     console.error(`- ${failure}`);
   }
   process.exit(1);
 }
 
-console.log("Private npm publish readiness passed.");
+console.log("Public npm publish readiness passed.");

@@ -34,12 +34,12 @@ Optional:
 mkdir -p /tmp/superagent-smoke
 cd /tmp/superagent-smoke
 npm i -D @aimlsuperagent/agent
-npx aiml-superagent init .
-npx aiml-superagent check .
+npx @aimlsuperagent/agent init .
+npx @aimlsuperagent/agent check .
 ```
 
 ## Publication
 
 - Confirm MIT License is still the intended public license.
-- Remove private release candidate wording if appropriate.
+- Remove stale pre-publication wording if appropriate.
 - Tag first public release.

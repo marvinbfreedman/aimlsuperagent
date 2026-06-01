@@ -115,13 +115,13 @@ npm i -D @aimlsuperagent/agent
 Copy the templates into a project:
 
 ```bash
-npx aiml-superagent init .
+npx @aimlsuperagent/agent init .
 ```
 
 Check a project for SuperAgent readiness:
 
 ```bash
-npx aiml-superagent check .
+npx @aimlsuperagent/agent check .
 ```
 
 For personal machine-wide use, install the CLI globally:
@@ -143,13 +143,13 @@ npm run pack:dry-run
 Before making a repo public:
 
 ```bash
-npx aiml-superagent check . --release
+npx @aimlsuperagent/agent check . --release
 ```
 
 For CI where medium-risk findings should fail the build:
 
 ```bash
-npx aiml-superagent check . --strict
+npx @aimlsuperagent/agent check . --strict
 ```
 
 ## Package Analytics
@@ -245,7 +245,7 @@ The model can change. The operating discipline should remain stable.
 2. Fill in production owners, deployment surfaces, package manager, test commands, and secret names.
 3. Add `DEPLOYMENT_LOG.md` after the next live deploy.
 4. Add incident reports only for issues that change future behavior.
-5. Run `npx aiml-superagent check`.
+5. Run `npx @aimlsuperagent/agent check`.
 6. Iterate until the checker reports no high-risk gaps.
 
 ## Design Principles
@@ -272,11 +272,11 @@ See [docs/comparison-claude-md.md](docs/comparison-claude-md.md).
 
 ## Status
 
-Private release candidate. The repository can remain private while using the MIT License; the license defines reuse terms if and when the project is shared publicly.
+Public release candidate. The repository and npm package are public under the MIT License.
 
 Package name: `@aimlsuperagent/agent`.
 
-The npm package uses restricted/private access while early testing continues. Authorized users must be added to the npm organization/team and run `npm login` before installing. See [docs/npm-private-publishing.md](docs/npm-private-publishing.md).
+Install globally with `npm i -g @aimlsuperagent/agent`, or run directly with `npx @aimlsuperagent/agent`. See [docs/npm-publishing.md](docs/npm-publishing.md).
 
 ## License
 

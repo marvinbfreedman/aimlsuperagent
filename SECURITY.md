@@ -6,7 +6,7 @@ AiML SuperAgent is designed around secret-safe operation.
 
 Do not open public issues containing secrets.
 
-If this repo is made public, use the repository security contact or private advisory flow for sensitive reports.
+Use the repository security contact or private advisory flow for sensitive reports.
 
 ## Secret Policy
 
@@ -29,4 +29,3 @@ Run before release:
 ```bash
 npm run check
 ```
-
