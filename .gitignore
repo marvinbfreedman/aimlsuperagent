@@ -1,0 +1,10 @@
+.DS_Store
+.env
+.env.*
+.npm-cache/
+node_modules/
+dist/
+build/
+.next/
+coverage/
+*.tgz

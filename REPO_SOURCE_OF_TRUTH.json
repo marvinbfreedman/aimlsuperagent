@@ -57,7 +57,7 @@
       "all templates are copy-safe",
       "checker passes",
       "README links resolve",
-      "npm private scope confirmed before removing private:true"
+      "npm restricted/private access confirmed before publishing"
     ]
   },
   "secrets": {

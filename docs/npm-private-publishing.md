@@ -6,19 +6,11 @@ This repository is prepared for a private npm package named:
 @aimlsuperagent/agent
 ```
 
-Do not publish until npm confirms that the `@aimlsuperagent` scope is owned by the correct account or organization and private packages are enabled.
+The package is currently published as a private/restricted npm package. Users who are not authenticated and authorized will see npm `404 Not Found` errors that can look like the package or organization does not exist.
 
 ## Current Safety State
 
-`package.json` intentionally keeps:
-
-```json
-"private": true
-```
-
-That blocks accidental publishing.
-
-The package also includes:
+`package.json` includes:
 
 ```json
 "publishConfig": {
@@ -29,7 +21,7 @@ The package also includes:
 
 Restricted access is the npm setting required for a private scoped package.
 
-## Confirm Scope Ownership
+## Confirm Current Access
 
 Log in:
 
@@ -42,10 +34,37 @@ Check organization or scope access:
 
 ```bash
 npm org ls aimlsuperagent
-npm access ls-packages @aimlsuperagent
+npm team ls aimlsuperagent
+npm team ls aimlsuperagent:developers
+npm access get status @aimlsuperagent/agent
+npm access list packages aimlsuperagent:developers
 ```
 
-If those commands fail because the scope or organization does not exist, create or claim the npm organization/scope before publishing.
+Expected current shape:
+
+- package status: `private`
+- org owner: `aimlnexus`
+- install team: `aimlsuperagent:developers`
+- team package access: `@aimlsuperagent/agent` read-only
+
+## Add A Private Package User
+
+Use the person's npm username, not their email address.
+
+```bash
+npm org set aimlsuperagent npm_username developer
+npm team add aimlsuperagent:developers npm_username
+```
+
+The user must accept the npm organization invite, then run:
+
+```bash
+npm login
+npm i -g @aimlsuperagent/agent
+aiml-superagent --help
+```
+
+If they still see `404 Not Found`, they are either not logged in, have not accepted the org invite, are not in the `developers` team, or are using a different npm registry.
 
 ## Dry Run
 
@@ -60,9 +79,9 @@ Review the file list. It should include docs, templates, examples, schemas, the 
 
 ## Publishing Procedure
 
-Only after private package access is confirmed:
+For a new private version:
 
-1. Remove `"private": true` from `package.json` in a dedicated publish commit.
+1. Bump the package version.
 2. Run:
 
 ```bash
@@ -86,4 +105,3 @@ aiml-superagent --help
 ## Failure Rule
 
 If npm cannot confirm restricted/private access, do not publish. Keep using the private GitHub repo or a private tarball.
-

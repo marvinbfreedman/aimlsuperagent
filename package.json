@@ -41,10 +41,10 @@
   "homepage": "https://aimlsuperagent.com",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/whisperaiml/superagent-repo.git"
+    "url": "git+https://github.com/marvinbfreedman/aimlsuperagent.git"
   },
   "bugs": {
-    "url": "https://github.com/whisperaiml/superagent-repo/issues"
+    "url": "https://github.com/marvinbfreedman/aimlsuperagent/issues"
   },
   "engines": {
     "node": ">=18"

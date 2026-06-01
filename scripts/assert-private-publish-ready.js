@@ -23,7 +23,7 @@ if (!pkg.bin?.["aiml-superagent"]) {
 }
 
 if (pkg.private === true) {
-  failures.push("package.json still has private:true safety brake. Confirm npm private package access, then remove private:true only for the publishing commit.");
+  failures.push("package.json still has private:true safety brake. Confirm npm restricted/private access before publishing.");
 }
 
 if (failures.length > 0) {
@@ -35,4 +35,3 @@ if (failures.length > 0) {
 }
 
 console.log("Private npm publish readiness passed.");
-

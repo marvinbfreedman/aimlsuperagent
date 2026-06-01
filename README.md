@@ -274,9 +274,9 @@ See [docs/comparison-claude-md.md](docs/comparison-claude-md.md).
 
 Private release candidate. The repository can remain private while using the MIT License; the license defines reuse terms if and when the project is shared publicly.
 
-Prepared package name: `@aimlsuperagent/agent`.
+Package name: `@aimlsuperagent/agent`.
 
-Publishing is intentionally blocked by `"private": true` until npm scope ownership and private package access are confirmed. See [docs/npm-private-publishing.md](docs/npm-private-publishing.md).
+The npm package uses restricted/private access while early testing continues. Authorized users must be added to the npm organization/team and run `npm login` before installing. See [docs/npm-private-publishing.md](docs/npm-private-publishing.md).
 
 ## License
 
