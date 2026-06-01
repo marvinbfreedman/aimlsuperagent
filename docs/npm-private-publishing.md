@@ -92,6 +92,24 @@ npm publish --access restricted
 
 Do not run `npm publish --access public`.
 
+## Trusted Publishing
+
+npm recommends Trusted Publishing for automation and CI/CD. This repository includes:
+
+```text
+.github/workflows/npm-publish.yml
+```
+
+Configure the trusted publisher in npm package settings:
+
+- Provider: GitHub Actions
+- Organization or user: `marvinbfreedman`
+- Repository: `aimlsuperagent`
+- Workflow filename: `npm-publish.yml`
+- Allowed action: `npm publish`
+
+After that, use GitHub Actions > Publish npm package > Run workflow. The workflow uses GitHub OIDC instead of a long-lived `NPM_TOKEN`.
+
 ## Install
 
 Authorized users can install globally:
