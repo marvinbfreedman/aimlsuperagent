@@ -167,7 +167,7 @@ npx @aimlsuperagent/agent check . --strict
 
 ## Package Analytics
 
-CLI analytics is disabled by default.
+**CLI analytics is disabled by default.**
 
 Enable it only when you want package usage events sent to the AiML SuperAgent tracking endpoint:
 
