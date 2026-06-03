@@ -124,6 +124,17 @@ Check a project for SuperAgent readiness:
 npx @aimlsuperagent/agent check .
 ```
 
+## After Init
+
+After `init` and `check`, tell your AI coding assistant:
+
+```text
+Read AGENTS.md, REPO_SOURCE_OF_TRUTH.json, and WORKING_NOTES.md first.
+Use them as the project operating context.
+Before editing code, verify the source of truth, search only the files relevant to this task, make the smallest safe diff, run the fastest meaningful check, and update durable notes only if reality changed.
+Do not store secrets, credential values, private customer data, local machine paths, or scratch-only notes in committed files.
+```
+
 Generated notes are intended to be safe to commit only after you keep them value-free: record names, roles, decisions, and verification summaries, never credential values, private customer data, local machine paths, or scratch-only notes.
 
 For personal machine-wide use, install the CLI globally:

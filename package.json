@@ -1,6 +1,6 @@
 {
   "name": "@aimlsuperagent/agent",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "A token-efficient operating framework for AI coding assistants.",
   "type": "module",
   "bin": {

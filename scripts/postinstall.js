@@ -11,6 +11,10 @@ Next steps:
   npx @aimlsuperagent/agent init .
   npx @aimlsuperagent/agent check .
 
+Then tell your AI assistant:
+  Read AGENTS.md, REPO_SOURCE_OF_TRUTH.json, and WORKING_NOTES.md first.
+  Use them as project operating context before editing code.
+
 Docs:
   https://github.com/marvinbfreedman/aimlsuperagent
 
