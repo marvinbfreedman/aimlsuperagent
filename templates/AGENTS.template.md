@@ -13,6 +13,10 @@ Describe the project in one paragraph.
 ## Working Rules
 
 - Use targeted search before loading broad folders.
+- Before changing code, confirm which backend, service, deployment, or environment is live when relevant.
+- Check `DEPLOYMENT_LOG.md` and `PRODUCTION_CHECK.md` when the task depends on release or live behavior.
+- Inspect the relevant source file before proposing or applying changes.
+- Treat old notes as suspect until verified against source or production reality.
 - Make small, task-traceable diffs.
 - Verify production reality before changing code when the task depends on live state.
 - Do not store secrets in notes, examples, commits, or logs.

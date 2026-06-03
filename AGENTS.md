@@ -18,11 +18,15 @@ The framework must be:
 1. Read `REPO_SOURCE_OF_TRUTH.json` before making structural claims about this repo.
 2. Read `WORKING_NOTES.md` only when present and directly relevant.
 3. Prefer targeted search over loading broad folders.
-4. Do not add secrets, tokens, private URLs, account IDs, or credential values to examples.
-5. Keep examples generic unless explicitly marked as fictional.
-6. Make small diffs with a clear reason.
-7. Run the fastest meaningful verification after changes.
-8. Update durable notes only when a fact will help future work.
+4. Before changing code, confirm which backend, service, deployment, or environment is live when relevant.
+5. Check deployment/proof notes when the task depends on release or live behavior.
+6. Inspect the relevant source file before proposing or applying changes.
+7. Treat old notes as suspect until verified against source or production reality.
+8. Do not add secrets, tokens, private URLs, account IDs, or credential values to examples.
+9. Keep examples generic unless explicitly marked as fictional.
+10. Make small diffs with a clear reason.
+11. Run the fastest meaningful verification after changes.
+12. Update durable notes only when a fact will help future work.
 
 ## Context Minimizer Rules
 
@@ -83,4 +87,3 @@ For release changes:
 - confirm repo status
 - confirm private/public state before publication
 - confirm no secrets are present
-

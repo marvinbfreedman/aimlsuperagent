@@ -131,7 +131,7 @@ After `init` and `check`, tell your AI coding assistant:
 ```text
 Read AGENTS.md, REPO_SOURCE_OF_TRUTH.json, and WORKING_NOTES.md first.
 Use them as the project operating context.
-Before editing code, verify the source of truth, search only the files relevant to this task, make the smallest safe diff, run the fastest meaningful check, and update durable notes only if reality changed.
+Before changing code, confirm which backend, service, deployment, or environment is live when relevant; check DEPLOYMENT_LOG.md and PRODUCTION_CHECK.md when available; inspect the relevant source file; avoid stale notes; make the smallest safe diff; run the fastest meaningful proof; and update durable memory only if reality changed.
 Do not store secrets, credential values, private customer data, local machine paths, or scratch-only notes in committed files.
 ```
 
