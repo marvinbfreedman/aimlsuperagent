@@ -104,6 +104,15 @@ function readJson(file) {
   return JSON.parse(fs.readFileSync(file, "utf8"));
 }
 
+function isFrameworkPackageRepo(rootDir) {
+  try {
+    const packageJson = readJson(path.join(rootDir, "package.json"));
+    return packageJson.name === "@aimlsuperagent/agent";
+  } catch {
+    return false;
+  }
+}
+
 let cachedPackageVersion;
 
 function packageVersion() {
@@ -370,7 +379,11 @@ function checkProject(targetDir, options = {}) {
     }
   }
 
-  for (const file of RECOMMENDED_FILES) {
+  const recommendedFiles = isFrameworkPackageRepo(rootDir)
+    ? RECOMMENDED_FILES.filter((file) => file !== "DEPLOYMENT_LOG.md")
+    : RECOMMENDED_FILES;
+
+  for (const file of recommendedFiles) {
     if (!fs.existsSync(path.join(rootDir, file))) {
       findings.push({
         severity: "low",
