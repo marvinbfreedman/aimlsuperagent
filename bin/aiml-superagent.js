@@ -611,6 +611,7 @@ async function main() {
     for (const action of actions) {
       console.log(`${action.type}: ${action.file}`);
     }
+    console.log("commit-safety: run `npx @aimlsuperagent/agent check .` before committing generated notes, and store names/roles only, never secret values.");
     const exitCode = 0;
     await recordCliAnalytics(options, {
       command,

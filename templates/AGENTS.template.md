@@ -16,6 +16,7 @@ Describe the project in one paragraph.
 - Make small, task-traceable diffs.
 - Verify production reality before changing code when the task depends on live state.
 - Do not store secrets in notes, examples, commits, or logs.
+- Keep generated notes commit-safe: names and roles are okay; credential values, local paths, customer data, and scratch-only notes are not.
 - Update durable notes only when reality changed.
 
 ## Do Not Load By Default
@@ -39,4 +40,3 @@ REPLACE_WITH_COMMAND
 ```
 
 If the command cannot run, state why.
-

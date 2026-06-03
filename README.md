@@ -124,6 +124,8 @@ Check a project for SuperAgent readiness:
 npx @aimlsuperagent/agent check .
 ```
 
+Generated notes are intended to be safe to commit only after you keep them value-free: record names, roles, decisions, and verification summaries, never credential values, private customer data, local machine paths, or scratch-only notes.
+
 For personal machine-wide use, install the CLI globally:
 
 ```bash
