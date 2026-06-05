@@ -16,6 +16,7 @@
     "templates": "templates/",
     "docs": "docs/",
     "examples": "examples/",
+    "paidCli": "docs/14-paid-cli.md",
     "npmPublishing": "docs/npm-publishing.md"
   },
   "contextMinimizer": {

@@ -83,6 +83,7 @@ aiml-superagent/
     11-anti-patterns.md
     12-context-budget.md
     13-package-analytics.md
+    14-paid-cli.md
     comparison-claude-md.md
     release-checklist.md
   schemas/
@@ -145,6 +146,35 @@ aiml-superagent check .
 ```
 
 Freshly initialized projects are expected to show `needs-review` until template placeholders for project name, dates, and proof commands are replaced.
+
+## Paid CLI
+
+The core project workflow stays free:
+
+```bash
+npx @aimlsuperagent/agent init .
+npx @aimlsuperagent/agent check .
+```
+
+Paid commands use an AiML SuperAgent API key from `aimlsuperagent.com`.
+
+```bash
+aiml-superagent login <api-key>
+aiml-superagent status
+aiml-superagent doctor .
+```
+
+Use environment variables instead of local key storage in CI:
+
+```bash
+AIML_SUPERAGENT_API_KEY=aiml_live_xxx aiml-superagent doctor .
+```
+
+`doctor` is the first paid-only command. It verifies the API key, runs the readiness checks, and reports paid-feature availability without sending file contents, notes, source code, repo names, paths, or secrets.
+
+Paid verification increments server-side API key usage and records bounded feature events such as `license_login`, `license_status`, and `doctor`.
+
+See [docs/14-paid-cli.md](docs/14-paid-cli.md).
 
 From this repository, maintainers can run:
 
