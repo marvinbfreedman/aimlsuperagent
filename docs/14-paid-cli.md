@@ -16,10 +16,32 @@ aiml-superagent login <api-key>
 aiml-superagent status
 aiml-superagent logout
 aiml-superagent doctor .
+aiml-superagent doctor . --deep
+aiml-superagent sync .
+aiml-superagent env-audit .
+aiml-superagent context-report .
+aiml-superagent ci .
+aiml-superagent incident "what broke"
+aiml-superagent handoff .
+aiml-superagent deploy-proof .
+aiml-superagent usage
 aiml-superagent upgrade
 ```
 
 `doctor` is the first paid-only command. It verifies the active API key, runs the same project readiness checks as `check`, and reports paid-feature availability.
+
+## Premium Command Set
+
+- `doctor --deep`: runs readiness checks plus context, env, stale-note, and production-proof recommendations.
+- `sync`: sends bounded project metadata and readiness summary to the AiML SuperAgent cloud API.
+- `env-audit`: compares env names across local env files and `.env.example` without printing values.
+- `context-report`: ranks files by active-context risk and recommends read-first/search-only boundaries.
+- `ci`: fails release checks for high/medium readiness findings, oversized context, or env drift.
+- `incident`: creates a secret-safe incident report template with timeline, proof steps, and resolution notes.
+- `handoff`: prints or writes the exact prompt to give Claude, Codex, Cursor, or another AI coding assistant.
+- `deploy-proof`: writes a deployment proof file with branch, commit, proof commands, and evidence slots.
+- `usage`: shows active plan, usage count, feature entitlements, and last verification metadata.
+- `upgrade --feature <name>`: explains where to subscribe for a locked paid feature.
 
 ## Usage And Feature Tracking
 

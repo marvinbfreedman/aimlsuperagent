@@ -29,6 +29,20 @@ AiML SuperAgent adds the missing operating layer:
 
 Use `CLAUDE.md` for behavior. Use AiML SuperAgent for project operation.
 
+## Capability Snapshot
+
+AiML SuperAgent now connects the public package, paid CLI, website checkout, and API-key verification flow:
+
+- Free repo setup with `init` and `check`
+- Paid API-key login with `login`, `status`, `logout`, and `upgrade`
+- Paid `doctor` command for readiness checks and release-aware proof
+- Premium commands for `doctor --deep`, `sync`, `env-audit`, `context-report`, `ci`, `incident`, `handoff`, `deploy-proof`, and `usage`
+- Server-side API key `usage_count`
+- Bounded feature usage events such as `license_login`, `license_status`, and `doctor`
+- Plan feature entitlements returned by the verification API
+- Stripe-backed customer subscription and API-key issuance on `aimlsuperagent.com`
+- Privacy-safe tracking that never sends file contents, notes, source code, repo paths, env values, or secrets
+
 ## The Core Idea
 
 The goal is not bigger notes.
@@ -162,6 +176,10 @@ Paid commands use an AiML SuperAgent API key from `aimlsuperagent.com`.
 aiml-superagent login <api-key>
 aiml-superagent status
 aiml-superagent doctor .
+aiml-superagent doctor . --deep
+aiml-superagent env-audit .
+aiml-superagent context-report .
+aiml-superagent handoff .
 ```
 
 Use environment variables instead of local key storage in CI:

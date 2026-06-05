@@ -80,6 +80,7 @@ const DEFAULT_ANALYTICS_TIMEOUT_MS = 750;
 const DEFAULT_API_BASE_URL = "https://aimlsuperagent.com";
 const DEFAULT_API_TIMEOUT_MS = 5000;
 const API_KEY_VERIFY_PATH = "/api/superagent/keys/verify";
+const PROJECT_SYNC_PATH = "/api/superagent/projects/sync";
 const CONFIG_DIR_NAME = ".aimlsuperagent";
 const CONFIG_FILE_NAME = "config.json";
 
@@ -92,8 +93,16 @@ Usage:
   aiml-superagent login <api-key>
   aiml-superagent status [--json]
   aiml-superagent logout
-  aiml-superagent doctor [target-dir] [--json] [--release] [--strict]
-  aiml-superagent upgrade
+  aiml-superagent doctor [target-dir] [--deep] [--json] [--release] [--strict]
+  aiml-superagent env-audit [target-dir] [--json]
+  aiml-superagent context-report [target-dir] [--json]
+  aiml-superagent ci [target-dir] [--json]
+  aiml-superagent incident "summary" [--output path]
+  aiml-superagent handoff [target-dir] [--output path]
+  aiml-superagent deploy-proof [target-dir] [--output path] [--json]
+  aiml-superagent sync [target-dir] [--json] [--include-remote]
+  aiml-superagent usage [--json]
+  aiml-superagent upgrade [--feature name]
 
 Analytics:
   Disabled by default. Set AIML_SUPERAGENT_ANALYTICS=1 or pass --analytics.
@@ -110,6 +119,9 @@ Examples:
   node bin/aiml-superagent.js check ../my-app --strict
   node bin/aiml-superagent.js login aiml_live_...
   node bin/aiml-superagent.js doctor ../my-app
+  node bin/aiml-superagent.js env-audit ../my-app
+  node bin/aiml-superagent.js context-report ../my-app
+  node bin/aiml-superagent.js handoff ../my-app
 `);
 }
 
@@ -252,6 +264,10 @@ function verifyEndpoint(options = {}) {
   return new URL(API_KEY_VERIFY_PATH, `${apiBaseUrl(options)}/`).toString();
 }
 
+function projectSyncEndpoint(options = {}) {
+  return new URL(PROJECT_SYNC_PATH, `${apiBaseUrl(options)}/`).toString();
+}
+
 async function verifyApiKey(apiKey, options = {}) {
   if (!apiKey || typeof apiKey !== "string") {
     return { valid: false, reason: "missing-api-key", apiBaseUrl: apiBaseUrl(options) };
@@ -331,6 +347,41 @@ async function verifyApiKey(apiKey, options = {}) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function requirePaidLicense(options, featureKey, commandName) {
+  const license = await licenseStatus({
+    ...options,
+    featureKey,
+    commandName
+  });
+
+  if (license.valid) {
+    return { ok: true, license };
+  }
+
+  return { ok: false, license };
+}
+
+function printPaidRequired(commandName, license, jsonMode) {
+  if (jsonMode) {
+    console.log(
+      JSON.stringify(
+        {
+          error: "paid-license-required",
+          command: commandName,
+          license
+        },
+        null,
+        2
+      )
+    );
+    return;
+  }
+
+  console.error(`AiML SuperAgent ${commandName} requires an active paid API key.`);
+  printLicenseStatus(license, false);
+  console.error(`Run \`aiml-superagent upgrade --feature ${commandName}\` to subscribe or \`aiml-superagent login <api-key>\` if you already have a key.`);
 }
 
 async function licenseStatus(options = {}, targetArg) {
@@ -476,6 +527,9 @@ function listTextFiles(rootDir) {
       if (skip.has(entry.name)) continue;
       const fullPath = path.join(dir, entry.name);
       const relPath = path.relative(rootDir, fullPath);
+      if (/^\.aimlsuperagent-ultraspeed.*\.json$/i.test(entry.name) || /^ULTRASPEED.*\.json$/i.test(entry.name)) {
+        continue;
+      }
 
       if (entry.isDirectory()) {
         walk(fullPath);
@@ -758,15 +812,502 @@ function printCheck(result, jsonMode) {
   }
 }
 
+function safeReadJson(file) {
+  try {
+    return readJson(file);
+  } catch {
+    return null;
+  }
+}
+
+function getProjectSourceOfTruth(rootDir) {
+  return safeReadJson(path.join(rootDir, "REPO_SOURCE_OF_TRUTH.json")) || {};
+}
+
+function getPackageJson(rootDir) {
+  return safeReadJson(path.join(rootDir, "package.json")) || {};
+}
+
+function classifyTextFile(relPath) {
+  const lower = relPath.toLowerCase();
+  if (lower === "agents.md" || lower === "repo_source_of_truth.json" || lower === "working_notes.md") return "read-first";
+  if (lower.includes("deployment") || lower.includes("incident") || lower.includes("safe_env")) return "read-when-relevant";
+  if (lower.endsWith(".env") || lower.includes(".env.")) return "env-names-only";
+  if (lower.includes("package.json") || lower.includes("next.config") || lower.includes("vercel.json")) return "config";
+  return "search-only";
+}
+
+function contextReport(targetDir) {
+  const rootDir = path.resolve(targetDir);
+  const files = fs.existsSync(rootDir)
+    ? listTextFiles(rootDir).map((relPath) => {
+        const sizeBytes = fs.statSync(path.join(rootDir, relPath)).size;
+        return {
+          file: relPath,
+          sizeBytes,
+          classification: classifyTextFile(relPath)
+        };
+      })
+    : [];
+
+  const totalBytes = files.reduce((sum, file) => sum + file.sizeBytes, 0);
+  const largest = [...files].sort((a, b) => b.sizeBytes - a.sizeBytes).slice(0, 12);
+  const oversized = files.filter((file) => {
+    if (file.file === "WORKING_NOTES.md") return file.sizeBytes > 80 * 1024;
+    if (file.file === "AGENTS.md") return file.sizeBytes > 40 * 1024;
+    return file.sizeBytes > 120 * 1024;
+  });
+
+  const byClassification = {};
+  for (const file of files) {
+    byClassification[file.classification] = (byClassification[file.classification] || 0) + 1;
+  }
+
+  const recommendations = [];
+  if (oversized.length > 0) {
+    recommendations.push("Archive, summarize, or split oversized context files before asking an agent to load them.");
+  }
+  if (!files.some((file) => file.file === "REPO_SOURCE_OF_TRUTH.json")) {
+    recommendations.push("Add REPO_SOURCE_OF_TRUTH.json so agents start from stable project facts.");
+  }
+  if (!files.some((file) => file.file === "WORKING_NOTES.md")) {
+    recommendations.push("Add WORKING_NOTES.md for durable facts and resolved context.");
+  }
+  recommendations.push("Use targeted search for search-only files instead of loading broad directories.");
+
+  return {
+    rootDir,
+    fileCount: files.length,
+    totalBytes,
+    estimatedTokens: Math.ceil(totalBytes / 4),
+    byClassification,
+    largest,
+    oversized,
+    recommendations
+  };
+}
+
+function printContextReport(report, jsonMode) {
+  if (jsonMode) {
+    console.log(JSON.stringify(report, null, 2));
+    return;
+  }
+
+  console.log(`AiML SuperAgent context report: ${report.rootDir}`);
+  console.log(`Text files: ${report.fileCount}`);
+  console.log(`Estimated active-token risk if loaded all: ${report.estimatedTokens}`);
+  console.log("Classifications:");
+  for (const [name, count] of Object.entries(report.byClassification)) {
+    console.log(`- ${name}: ${count}`);
+  }
+  console.log("Largest files:");
+  for (const file of report.largest.slice(0, 8)) {
+    console.log(`- ${file.file}: ${file.sizeBytes} bytes (${file.classification})`);
+  }
+  if (report.oversized.length > 0) {
+    console.log("Oversized context risks:");
+    for (const file of report.oversized) {
+      console.log(`- ${file.file}: ${file.sizeBytes} bytes`);
+    }
+  }
+  console.log("Recommendations:");
+  for (const item of report.recommendations) {
+    console.log(`- ${item}`);
+  }
+}
+
+function parseEnvNamesFromFile(file) {
+  if (!fs.existsSync(file)) return [];
+  const names = new Set();
+  const lines = fs.readFileSync(file, "utf8").split(/\r?\n/);
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("export #")) continue;
+    const match = trimmed.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/);
+    if (match) names.add(match[1]);
+  }
+
+  return [...names].sort();
+}
+
+function envAudit(targetDir) {
+  const rootDir = path.resolve(targetDir);
+  const candidateFiles = [
+    ".env.example",
+    ".env",
+    ".env.local",
+    ".env.development",
+    ".env.production",
+    ".env.preview"
+  ];
+  const sources = candidateFiles
+    .map((file) => ({
+      file,
+      exists: fs.existsSync(path.join(rootDir, file)),
+      names: parseEnvNamesFromFile(path.join(rootDir, file))
+    }))
+    .filter((source) => source.exists);
+
+  const example = sources.find((source) => source.file === ".env.example")?.names || [];
+  const localNames = new Set(
+    sources
+      .filter((source) => source.file !== ".env.example")
+      .flatMap((source) => source.names)
+  );
+  const allNames = new Set(sources.flatMap((source) => source.names));
+  const duplicateNames = [...allNames]
+    .map((name) => ({
+      name,
+      files: sources.filter((source) => source.names.includes(name)).map((source) => source.file)
+    }))
+    .filter((item) => item.files.length > 1);
+
+  const missingLocalFromExample = example.filter((name) => !localNames.has(name));
+  const localNotInExample = [...localNames].filter((name) => !example.includes(name)).sort();
+
+  return {
+    rootDir,
+    sources,
+    summary: {
+      sourceCount: sources.length,
+      uniqueNameCount: allNames.size,
+      missingLocalFromExampleCount: missingLocalFromExample.length,
+      localNotInExampleCount: localNotInExample.length,
+      duplicateNameCount: duplicateNames.length
+    },
+    missingLocalFromExample,
+    localNotInExample,
+    duplicateNames,
+    safety: "Names only. Values are not printed, stored, or synced."
+  };
+}
+
+function printEnvAudit(audit, jsonMode) {
+  if (jsonMode) {
+    console.log(JSON.stringify(audit, null, 2));
+    return;
+  }
+
+  console.log(`AiML SuperAgent env audit: ${audit.rootDir}`);
+  console.log(audit.safety);
+  console.log(`Env sources: ${audit.summary.sourceCount}`);
+  for (const source of audit.sources) {
+    console.log(`- ${source.file}: ${source.names.length} names`);
+  }
+  console.log(`Missing locally from .env.example: ${audit.summary.missingLocalFromExampleCount}`);
+  for (const name of audit.missingLocalFromExample.slice(0, 20)) console.log(`- ${name}`);
+  console.log(`Local names not in .env.example: ${audit.summary.localNotInExampleCount}`);
+  for (const name of audit.localNotInExample.slice(0, 20)) console.log(`- ${name}`);
+  console.log(`Duplicate names across files: ${audit.summary.duplicateNameCount}`);
+  for (const item of audit.duplicateNames.slice(0, 20)) console.log(`- ${item.name}: ${item.files.join(", ")}`);
+}
+
+function gitHead(rootDir) {
+  const gitDir = path.join(rootDir, ".git");
+  const headFile = path.join(gitDir, "HEAD");
+  if (!fs.existsSync(headFile)) return { hasGit: false };
+
+  const head = fs.readFileSync(headFile, "utf8").trim();
+  if (head.startsWith("ref: ")) {
+    const ref = head.slice(5);
+    const branch = ref.replace(/^refs\/heads\//, "");
+    const refFile = path.join(gitDir, ref);
+    const commit = fs.existsSync(refFile) ? fs.readFileSync(refFile, "utf8").trim() : null;
+    return { hasGit: true, branch, commit };
+  }
+
+  return { hasGit: true, branch: "detached", commit: head || null };
+}
+
+function gitRemote(rootDir) {
+  const configFile = path.join(rootDir, ".git", "config");
+  if (!fs.existsSync(configFile)) return null;
+  const config = fs.readFileSync(configFile, "utf8");
+  const match = config.match(/\[remote "origin"\][\s\S]*?\n\s*url\s*=\s*(.+)/);
+  return match?.[1]?.trim() || null;
+}
+
+function detectFramework(rootDir) {
+  const packageJson = getPackageJson(rootDir);
+  const deps = {
+    ...(packageJson.dependencies || {}),
+    ...(packageJson.devDependencies || {})
+  };
+
+  if (deps.next) return "nextjs";
+  if (deps.react) return "react";
+  if (deps.vue) return "vue";
+  if (deps.svelte) return "svelte";
+  if (fs.existsSync(path.join(rootDir, "Package.swift"))) return "swift";
+  if (fs.existsSync(path.join(rootDir, "android"))) return "android";
+  return "unknown";
+}
+
+function packageManager(rootDir) {
+  if (fs.existsSync(path.join(rootDir, "pnpm-lock.yaml"))) return "pnpm";
+  if (fs.existsSync(path.join(rootDir, "yarn.lock"))) return "yarn";
+  if (fs.existsSync(path.join(rootDir, "package-lock.json"))) return "npm";
+  return "unknown";
+}
+
+function projectName(rootDir) {
+  const source = getProjectSourceOfTruth(rootDir);
+  const packageJson = getPackageJson(rootDir);
+  return source.project?.name || packageJson.name || path.basename(rootDir);
+}
+
+function deploymentProof(targetDir) {
+  const rootDir = path.resolve(targetDir);
+  const source = getProjectSourceOfTruth(rootDir);
+  const git = gitHead(rootDir);
+  return {
+    rootDir,
+    generatedAt: new Date().toISOString(),
+    projectName: projectName(rootDir),
+    git,
+    defaultProofCommands: source.verification?.defaultCommands || [],
+    releaseChecks: source.verification?.releaseChecks || [],
+    notes: [
+      "Record deployment URL, build status, smoke-test URL, and proof command output here.",
+      "Do not paste secrets, token values, private customer data, or local-only machine paths."
+    ]
+  };
+}
+
+function deploymentProofMarkdown(proof) {
+  const lines = [
+    "# Deployment Proof",
+    "",
+    `Generated: ${proof.generatedAt}`,
+    `Project: ${proof.projectName}`,
+    `Branch: ${proof.git.branch || "unknown"}`,
+    `Commit: ${proof.git.commit || "unknown"}`,
+    "",
+    "## Proof Commands",
+    ...(proof.defaultProofCommands.length ? proof.defaultProofCommands.map((command) => `- [ ] \`${command}\``) : ["- [ ] Add fastest meaningful proof command"]),
+    "",
+    "## Release Checks",
+    ...(proof.releaseChecks.length ? proof.releaseChecks.map((check) => `- [ ] ${check}`) : ["- [ ] Add release checks"]),
+    "",
+    "## Evidence",
+    "- Deployment URL:",
+    "- Build status:",
+    "- Smoke test URL:",
+    "- Result:",
+    "",
+    "## Safety",
+    ...proof.notes.map((note) => `- ${note}`),
+    ""
+  ];
+  return lines.join("\n");
+}
+
+function writeOutputFile(rootDir, output, fallbackName, content) {
+  const target = path.resolve(rootDir, output || fallbackName);
+  ensureDir(path.dirname(target));
+  fs.writeFileSync(target, content, "utf8");
+  return target;
+}
+
+function timestampSlug() {
+  return new Date().toISOString().replace(/[:.]/g, "-");
+}
+
+function availableOutput(rootDir, primaryName, fallbackName) {
+  if (!fs.existsSync(path.join(rootDir, primaryName))) return primaryName;
+  return fallbackName;
+}
+
+function incidentMarkdown(summary, rootDir) {
+  const safeSummary = String(summary || "Untitled incident").trim() || "Untitled incident";
+  return [
+    "# Incident Report",
+    "",
+    `Created: ${new Date().toISOString()}`,
+    `Project: ${projectName(rootDir)}`,
+    `Summary: ${safeSummary}`,
+    "",
+    "## Impact",
+    "- What broke:",
+    "- Who is affected:",
+    "- Current status:",
+    "",
+    "## Timeline",
+    "- Start:",
+    "- First signal:",
+    "- Mitigation:",
+    "- Resolution:",
+    "",
+    "## Suspected Causes",
+    "-",
+    "",
+    "## Proof Steps",
+    "- [ ] Inspect source of truth",
+    "- [ ] Check deployment state",
+    "- [ ] Reproduce or verify current behavior",
+    "- [ ] Run fastest meaningful proof command",
+    "",
+    "## Resolution Notes",
+    "-",
+    "",
+    "## Safety",
+    "- Do not store secrets, token values, private customer data, or local machine-only paths in this incident report.",
+    ""
+  ].join("\n");
+}
+
+function handoffPrompt(targetDir) {
+  const rootDir = path.resolve(targetDir);
+  const source = getProjectSourceOfTruth(rootDir);
+  const readFirst = source.contextMinimizer?.readFirst || ["AGENTS.md", "REPO_SOURCE_OF_TRUTH.json", "WORKING_NOTES.md"];
+  const doNotLoad = source.contextMinimizer?.doNotLoadByDefault || ["node_modules", "build", "dist", ".next", "large logs"];
+  const proofCommands = source.verification?.defaultCommands || [];
+
+  return [
+    "Read the AiML SuperAgent operating files before editing code.",
+    "",
+    "Read first:",
+    ...readFirst.map((file) => `- ${file}`),
+    "",
+    "Do not load by default:",
+    ...doNotLoad.map((item) => `- ${item}`),
+    "",
+    "Before changing code:",
+    "- Confirm which backend, service, deployment, or environment is live when relevant.",
+    "- Inspect the relevant source file before proposing or applying changes.",
+    "- Treat old notes as suspect until verified against source or production reality.",
+    "- Make the smallest safe diff.",
+    "- Run the fastest meaningful proof.",
+    "- Update durable memory only if reality changed.",
+    "- Never store secrets, credential values, private customer data, local machine paths, or scratch-only notes in committed files.",
+    "",
+    "Suggested proof commands:",
+    ...(proofCommands.length ? proofCommands.map((command) => `- ${command}`) : ["- Add the fastest meaningful proof command for this repo."]),
+    ""
+  ].join("\n");
+}
+
+function deepDoctorReport(rootDir, result) {
+  const context = contextReport(rootDir);
+  const env = envAudit(rootDir);
+  const missingProof = !fs.existsSync(path.join(rootDir, "PRODUCTION_CHECK.md"));
+  const staleRisk = result.findings.filter((finding) => finding.rule?.includes("placeholder") || finding.message.includes("placeholder"));
+
+  return {
+    context,
+    envSummary: env.summary,
+    productionCheckPresent: !missingProof,
+    staleRiskCount: staleRisk.length,
+    recommendedNextReads: [
+      "REPO_SOURCE_OF_TRUTH.json",
+      "WORKING_NOTES.md",
+      "PRODUCTION_CHECK.md"
+    ].filter((file) => fs.existsSync(path.join(rootDir, file))),
+    recommendations: [
+      ...(missingProof ? ["Add PRODUCTION_CHECK.md for live-state verification."] : []),
+      ...(context.oversized.length ? ["Compress or archive oversized context files before long agent sessions."] : []),
+      ...(env.summary.localNotInExampleCount ? ["Reconcile local env names with .env.example before deployment work."] : []),
+      "Use `aiml-superagent handoff .` before starting a new AI coding session."
+    ]
+  };
+}
+
+function printDeepDoctor(report, jsonMode) {
+  if (jsonMode) return;
+  console.log("Deep doctor:");
+  console.log(`- Context estimated tokens if loaded all: ${report.context.estimatedTokens}`);
+  console.log(`- Env unique names: ${report.envSummary.uniqueNameCount}`);
+  console.log(`- Production check present: ${report.productionCheckPresent ? "yes" : "no"}`);
+  console.log(`- Stale/template risk count: ${report.staleRiskCount}`);
+  console.log("Deep recommendations:");
+  for (const item of report.recommendations) console.log(`- ${item}`);
+}
+
+function syncPayload(targetDir, options, readiness) {
+  const rootDir = path.resolve(targetDir);
+  const git = gitHead(rootDir);
+  const payload = {
+    projectName: projectName(rootDir),
+    framework: detectFramework(rootDir),
+    packageManager: packageManager(rootDir),
+    gitBranch: git.branch || null,
+    gitCommit: git.commit || null,
+    includeRemote: Boolean(options.includeRemote),
+    repoRemote: options.includeRemote ? gitRemote(rootDir) : null,
+    readiness,
+    packageName: "@aimlsuperagent/agent",
+    packageVersion: packageVersion(),
+    metadata: {
+      hasSourceOfTruth: fs.existsSync(path.join(rootDir, "REPO_SOURCE_OF_TRUTH.json")),
+      hasWorkingNotes: fs.existsSync(path.join(rootDir, "WORKING_NOTES.md")),
+      hasDeploymentLog: fs.existsSync(path.join(rootDir, "DEPLOYMENT_LOG.md")),
+      hasSafeEnvAudit: fs.existsSync(path.join(rootDir, "SAFE_ENV_AUDIT.md"))
+    }
+  };
+  return payload;
+}
+
+async function syncProject(apiKey, payload, options = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), apiTimeoutMs());
+
+  try {
+    const response = await globalThis.fetch(projectSyncEndpoint(options), {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+        "user-agent": `aiml-superagent/${packageVersion()} node/${process.version}`
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+
+    let responseBody = {};
+    try {
+      responseBody = await response.json();
+    } catch {
+      responseBody = {};
+    }
+
+    if (!response.ok || responseBody.ok !== true) {
+      return {
+        ok: false,
+        status: response.status,
+        reason: responseBody.reason || `http-${response.status}`
+      };
+    }
+
+    return {
+      ok: true,
+      status: response.status,
+      ...responseBody
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error?.name === "AbortError" ? "sync-timeout" : "sync-request-failed",
+      error: error instanceof Error ? error.message : String(error)
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function parseArgs(argv) {
   const args = [...argv];
   const options = {
     json: false,
     release: false,
     strict: false,
+    deep: false,
+    includeRemote: false,
     analytics: null,
     apiKey: null,
-    apiBaseUrl: null
+    apiBaseUrl: null,
+    output: null,
+    feature: null
   };
   const positionals = [];
 
@@ -779,6 +1320,10 @@ function parseArgs(argv) {
       options.release = true;
     } else if (arg === "--strict") {
       options.strict = true;
+    } else if (arg === "--deep") {
+      options.deep = true;
+    } else if (arg === "--include-remote") {
+      options.includeRemote = true;
     } else if (arg === "--analytics") {
       options.analytics = true;
     } else if (arg === "--no-analytics") {
@@ -795,12 +1340,22 @@ function parseArgs(argv) {
       options.apiBaseUrl = arg.slice("--api-url=".length);
     } else if (arg.startsWith("--api-base-url=")) {
       options.apiBaseUrl = arg.slice("--api-base-url=".length);
+    } else if (arg === "--output" || arg === "-o") {
+      options.output = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--output=")) {
+      options.output = arg.slice("--output=".length);
+    } else if (arg === "--feature") {
+      options.feature = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--feature=")) {
+      options.feature = arg.slice("--feature=".length);
     } else {
       positionals.push(arg);
     }
   }
 
-  return { command: positionals[0], targetArg: positionals[1], options };
+  return { command: positionals[0], targetArg: positionals[1], positionals, options };
 }
 
 function isTruthy(value) {
@@ -880,6 +1435,7 @@ async function recordCliAnalytics(options, event) {
       json: Boolean(options.json),
       release: Boolean(options.release),
       strict: Boolean(options.strict),
+      deep: Boolean(options.deep),
       readiness: event.readiness?.label,
       highFindings: event.readiness?.high,
       mediumFindings: event.readiness?.medium,
@@ -907,7 +1463,7 @@ async function recordCliAnalytics(options, event) {
 
 async function main() {
   const startedAt = Date.now();
-  const { command, targetArg, options } = parseArgs(process.argv.slice(2));
+  const { command, targetArg, positionals, options } = parseArgs(process.argv.slice(2));
 
   if (!command || command === "--help" || command === "-h") {
     usage();
@@ -1037,13 +1593,30 @@ async function main() {
   }
 
   if (command === "upgrade") {
+    const feature = String(options.feature || targetArg || "").trim();
+    const pricingUrl = feature
+      ? `https://aimlsuperagent.com/?feature=${encodeURIComponent(feature)}#pricing`
+      : "https://aimlsuperagent.com/#pricing";
+
     if (options.json) {
       console.log(
         JSON.stringify(
           {
-            pricingUrl: "https://aimlsuperagent.com/#pricing",
+            feature: feature || null,
+            pricingUrl,
             accountUrl: "https://aimlsuperagent.com/",
-            apiKeyHelp: "Subscribe, create an API key, then run `aiml-superagent login <api-key>`."
+            apiKeyHelp: "Subscribe, create an API key, then run `aiml-superagent login <api-key>`.",
+            premiumCommands: [
+              "doctor --deep",
+              "sync",
+              "env-audit",
+              "context-report",
+              "ci",
+              "incident",
+              "handoff",
+              "deploy-proof",
+              "usage"
+            ]
           },
           null,
           2
@@ -1051,7 +1624,8 @@ async function main() {
       );
     } else {
       console.log("AiML SuperAgent paid CLI");
-      console.log("Pricing: https://aimlsuperagent.com/#pricing");
+      if (feature) console.log(`Feature: ${feature}`);
+      console.log(`Pricing: ${pricingUrl}`);
       console.log("After subscribing, create an API key and run:");
       console.log("  aiml-superagent login <api-key>");
     }
@@ -1066,30 +1640,10 @@ async function main() {
   }
 
   if (command === "doctor") {
-    const license = await licenseStatus({
-      ...options,
-      featureKey: "doctor",
-      commandName: "doctor"
-    });
+    const paid = await requirePaidLicense(options, options.deep ? "doctor_deep" : "doctor", "doctor");
 
-    if (!license.valid) {
-      if (options.json) {
-        console.log(
-          JSON.stringify(
-            {
-              error: "paid-license-required",
-              license
-            },
-            null,
-            2
-          )
-        );
-      } else {
-        console.error("AiML SuperAgent doctor requires an active paid API key.");
-        printLicenseStatus(license, false);
-        console.error("Run `aiml-superagent upgrade` to subscribe or `aiml-superagent login <api-key>` if you already have a key.");
-      }
-
+    if (!paid.ok) {
+      printPaidRequired(options.deep ? "doctor --deep" : "doctor", paid.license, options.json);
       const exitCode = 1;
       await recordCliAnalytics(options, {
         command,
@@ -1102,7 +1656,32 @@ async function main() {
     const targetDir = path.resolve(targetArg || ".");
     const result = checkProject(targetDir, options);
     const readiness = score(result.findings);
-    printDoctor(result, license, options.json);
+    const deepReport = options.deep ? deepDoctorReport(targetDir, result) : null;
+
+    if (options.json && deepReport) {
+      console.log(
+        JSON.stringify(
+          {
+            rootDir: result.rootDir,
+            readiness,
+            license: paid.license,
+            paidFeatures: {
+              doctor: true,
+              doctorDeep: true,
+              remoteVerification: true
+            },
+            findings: result.findings,
+            deepReport
+          },
+          null,
+          2
+        )
+      );
+    } else {
+      printDoctor(result, paid.license, options.json);
+      if (deepReport) printDeepDoctor(deepReport, options.json);
+    }
+
     const exitCode = readiness.high > 0 || (options.strict && readiness.medium > 0) ? 1 : 0;
     await recordCliAnalytics(options, {
       command,
@@ -1110,6 +1689,207 @@ async function main() {
       durationMs: Date.now() - startedAt,
       readiness
     });
+    return exitCode;
+  }
+
+  if (command === "usage") {
+    const paid = await requirePaidLicense(options, "license_usage", "usage");
+    if (!paid.ok) {
+      printPaidRequired("usage", paid.license, options.json);
+      const exitCode = 1;
+      await recordCliAnalytics(options, { command, exitCode, durationMs: Date.now() - startedAt });
+      return exitCode;
+    }
+
+    if (options.json) {
+      console.log(JSON.stringify(paid.license, null, 2));
+    } else {
+      printLicenseStatus(paid.license, false);
+      console.log("Usage includes successful paid verification events and feature-gated command checks.");
+    }
+
+    const exitCode = 0;
+    await recordCliAnalytics(options, { command, exitCode, durationMs: Date.now() - startedAt });
+    return exitCode;
+  }
+
+  if (command === "context-report") {
+    const paid = await requirePaidLicense(options, "context_report", "context-report");
+    if (!paid.ok) {
+      printPaidRequired("context-report", paid.license, options.json);
+      const exitCode = 1;
+      await recordCliAnalytics(options, { command, exitCode, durationMs: Date.now() - startedAt });
+      return exitCode;
+    }
+
+    const report = contextReport(targetArg || ".");
+    printContextReport(report, options.json);
+    const exitCode = report.oversized.length > 0 && options.strict ? 1 : 0;
+    await recordCliAnalytics(options, { command, exitCode, durationMs: Date.now() - startedAt });
+    return exitCode;
+  }
+
+  if (command === "env-audit") {
+    const paid = await requirePaidLicense(options, "env_audit", "env-audit");
+    if (!paid.ok) {
+      printPaidRequired("env-audit", paid.license, options.json);
+      const exitCode = 1;
+      await recordCliAnalytics(options, { command, exitCode, durationMs: Date.now() - startedAt });
+      return exitCode;
+    }
+
+    const audit = envAudit(targetArg || ".");
+    printEnvAudit(audit, options.json);
+    const exitCode = options.strict && audit.summary.localNotInExampleCount > 0 ? 1 : 0;
+    await recordCliAnalytics(options, { command, exitCode, durationMs: Date.now() - startedAt });
+    return exitCode;
+  }
+
+  if (command === "ci") {
+    const paid = await requirePaidLicense(options, "ci", "ci");
+    if (!paid.ok) {
+      printPaidRequired("ci", paid.license, options.json);
+      const exitCode = 1;
+      await recordCliAnalytics(options, { command, exitCode, durationMs: Date.now() - startedAt });
+      return exitCode;
+    }
+
+    const targetDir = path.resolve(targetArg || ".");
+    const result = checkProject(targetDir, { ...options, release: true, strict: true });
+    const readiness = score(result.findings);
+    const context = contextReport(targetDir);
+    const env = envAudit(targetDir);
+    const payload = {
+      rootDir: result.rootDir,
+      readiness,
+      findings: result.findings,
+      context: {
+        estimatedTokens: context.estimatedTokens,
+        oversized: context.oversized
+      },
+      env: env.summary
+    };
+
+    if (options.json) {
+      console.log(JSON.stringify(payload, null, 2));
+    } else {
+      printCheck(result, false);
+      console.log(`Context estimated tokens: ${context.estimatedTokens}`);
+      console.log(`Env unique names: ${env.summary.uniqueNameCount}`);
+    }
+
+    const exitCode =
+      readiness.high > 0 ||
+      readiness.medium > 0 ||
+      context.oversized.length > 0 ||
+      env.summary.localNotInExampleCount > 0
+        ? 1
+        : 0;
+    await recordCliAnalytics(options, { command, exitCode, durationMs: Date.now() - startedAt, readiness });
+    return exitCode;
+  }
+
+  if (command === "incident") {
+    const paid = await requirePaidLicense(options, "incident", "incident");
+    if (!paid.ok) {
+      printPaidRequired("incident", paid.license, options.json);
+      const exitCode = 1;
+      await recordCliAnalytics(options, { command, exitCode, durationMs: Date.now() - startedAt });
+      return exitCode;
+    }
+
+    const rootDir = path.resolve(".");
+    const summary = positionals.slice(1).join(" ") || "Untitled incident";
+    const defaultName = availableOutput(rootDir, "INCIDENT_REPORT.md", `incidents/${timestampSlug()}-incident.md`);
+    const target = writeOutputFile(rootDir, options.output, defaultName, incidentMarkdown(summary, rootDir));
+    if (options.json) {
+      console.log(JSON.stringify({ created: target, summary }, null, 2));
+    } else {
+      console.log(`Incident report created: ${target}`);
+    }
+
+    const exitCode = 0;
+    await recordCliAnalytics(options, { command, exitCode, durationMs: Date.now() - startedAt });
+    return exitCode;
+  }
+
+  if (command === "handoff") {
+    const paid = await requirePaidLicense(options, "handoff", "handoff");
+    if (!paid.ok) {
+      printPaidRequired("handoff", paid.license, options.json);
+      const exitCode = 1;
+      await recordCliAnalytics(options, { command, exitCode, durationMs: Date.now() - startedAt });
+      return exitCode;
+    }
+
+    const rootDir = path.resolve(targetArg || ".");
+    const prompt = handoffPrompt(rootDir);
+    if (options.output) {
+      const target = writeOutputFile(rootDir, options.output, "SUPERAGENT_HANDOFF.md", prompt);
+      if (options.json) console.log(JSON.stringify({ created: target }, null, 2));
+      else console.log(`Handoff prompt written: ${target}`);
+    } else if (options.json) {
+      console.log(JSON.stringify({ rootDir, prompt }, null, 2));
+    } else {
+      console.log(prompt);
+    }
+
+    const exitCode = 0;
+    await recordCliAnalytics(options, { command, exitCode, durationMs: Date.now() - startedAt });
+    return exitCode;
+  }
+
+  if (command === "deploy-proof") {
+    const paid = await requirePaidLicense(options, "deploy_proof", "deploy-proof");
+    if (!paid.ok) {
+      printPaidRequired("deploy-proof", paid.license, options.json);
+      const exitCode = 1;
+      await recordCliAnalytics(options, { command, exitCode, durationMs: Date.now() - startedAt });
+      return exitCode;
+    }
+
+    const rootDir = path.resolve(targetArg || ".");
+    const proof = deploymentProof(rootDir);
+    if (options.json) {
+      console.log(JSON.stringify(proof, null, 2));
+    } else {
+      const defaultName = availableOutput(rootDir, "DEPLOYMENT_PROOF.md", `deployment-proof-${timestampSlug()}.md`);
+      const target = writeOutputFile(rootDir, options.output, defaultName, deploymentProofMarkdown(proof));
+      console.log(`Deployment proof file written: ${target}`);
+    }
+
+    const exitCode = 0;
+    await recordCliAnalytics(options, { command, exitCode, durationMs: Date.now() - startedAt });
+    return exitCode;
+  }
+
+  if (command === "sync") {
+    const resolved = resolveApiKey(options);
+    if (!resolved.apiKey) {
+      const freeLicense = await licenseStatus(options);
+      printPaidRequired("sync", freeLicense, options.json);
+      const exitCode = 1;
+      await recordCliAnalytics(options, { command, exitCode, durationMs: Date.now() - startedAt });
+      return exitCode;
+    }
+
+    const targetDir = path.resolve(targetArg || ".");
+    const result = checkProject(targetDir, options);
+    const readiness = score(result.findings);
+    const payload = syncPayload(targetDir, options, readiness);
+    const response = await syncProject(resolved.apiKey, payload, options);
+
+    if (options.json) {
+      console.log(JSON.stringify({ request: payload, response }, null, 2));
+    } else if (response.ok) {
+      console.log(`Project synced: ${response.publicId || "ok"}`);
+      console.log(`Readiness: ${readiness.label}`);
+    } else {
+      console.error(`Project sync failed: ${response.reason || "unknown"}`);
+    }
+
+    const exitCode = response.ok ? 0 : 1;
+    await recordCliAnalytics(options, { command, exitCode, durationMs: Date.now() - startedAt, readiness });
     return exitCode;
   }
 
