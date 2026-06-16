@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import { spawn } from "node:child_process";
 
 const REQUIRED_FILES = [
   "AGENTS.md",
@@ -81,8 +82,12 @@ const DEFAULT_API_BASE_URL = "https://aimlsuperagent.com";
 const DEFAULT_API_TIMEOUT_MS = 5000;
 const API_KEY_VERIFY_PATH = "/api/superagent/keys/verify";
 const PROJECT_SYNC_PATH = "/api/superagent/projects/sync";
+const MEMORY_EVENTS_PATH = "/api/superagent/memory/events";
 const CONFIG_DIR_NAME = ".aimlsuperagent";
 const CONFIG_FILE_NAME = "config.json";
+const SIGNIN_PROVIDERS = new Set(["google", "github"]);
+const SIGNIN_PLAN_KEYS = new Set(["core", "pro"]);
+const SIGNIN_BILLING_PERIODS = new Set(["monthly", "yearly"]);
 
 function usage() {
   console.log(`AiML SuperAgent
@@ -90,6 +95,8 @@ function usage() {
 Usage:
   aiml-superagent init [target-dir]
   aiml-superagent check [target-dir] [--json] [--release] [--strict]
+  aiml-superagent signin [--provider google|github] [--plan core|pro] [--billing monthly|yearly] [--no-browser] [--json]
+  aiml-superagent signin-check [--json]
   aiml-superagent login <api-key>
   aiml-superagent status [--json]
   aiml-superagent logout
@@ -101,6 +108,7 @@ Usage:
   aiml-superagent handoff [target-dir] [--output path]
   aiml-superagent deploy-proof [target-dir] [--output path] [--json]
   aiml-superagent sync [target-dir] [--json] [--include-remote]
+  aiml-superagent memory [target-dir] --kind command|failure|deployment|decision|rag-eval --title "..." [--summary "..."] [--json]
   aiml-superagent usage [--json]
   aiml-superagent upgrade [--feature name]
 
@@ -110,6 +118,7 @@ Analytics:
 
 Paid CLI:
   Set AIML_SUPERAGENT_API_KEY or run login with an AiML SuperAgent API key.
+  Run signin to open the browser account flow, then login with the issued key.
   Override the API base URL with AIML_SUPERAGENT_API_URL or --api-url.
 
 Examples:
@@ -117,11 +126,14 @@ Examples:
   node bin/aiml-superagent.js check ../my-app
   node bin/aiml-superagent.js check ../my-app --release
   node bin/aiml-superagent.js check ../my-app --strict
+  node bin/aiml-superagent.js signin --provider google --plan core
+  node bin/aiml-superagent.js signin-check
   node bin/aiml-superagent.js login aiml_live_...
   node bin/aiml-superagent.js doctor ../my-app
   node bin/aiml-superagent.js env-audit ../my-app
   node bin/aiml-superagent.js context-report ../my-app
   node bin/aiml-superagent.js handoff ../my-app
+  node bin/aiml-superagent.js memory . --kind command --title "Build passed" --command-text "npm run build" --status success
 `);
 }
 
@@ -266,6 +278,114 @@ function verifyEndpoint(options = {}) {
 
 function projectSyncEndpoint(options = {}) {
   return new URL(PROJECT_SYNC_PATH, `${apiBaseUrl(options)}/`).toString();
+}
+
+function memoryEventsEndpoint(options = {}) {
+  return new URL(MEMORY_EVENTS_PATH, `${apiBaseUrl(options)}/`).toString();
+}
+
+function normalizeSigninProvider(value) {
+  const provider = String(value || "").trim().toLowerCase();
+  return SIGNIN_PROVIDERS.has(provider) ? provider : null;
+}
+
+function normalizeSigninPlan(value) {
+  const plan = String(value || "").trim().toLowerCase();
+  return SIGNIN_PLAN_KEYS.has(plan) ? plan : null;
+}
+
+function normalizeSigninBilling(value) {
+  const billing = String(value || "").trim().toLowerCase();
+  return SIGNIN_BILLING_PERIODS.has(billing) ? billing : "monthly";
+}
+
+function invalidSigninOption(options) {
+  if (options.provider && !normalizeSigninProvider(options.provider)) {
+    return {
+      option: "provider",
+      message: "Invalid provider. Use google or github."
+    };
+  }
+
+  if (options.plan && !normalizeSigninPlan(options.plan)) {
+    return {
+      option: "plan",
+      message: "Invalid plan. Use core or pro."
+    };
+  }
+
+  if (options.billing && !SIGNIN_BILLING_PERIODS.has(String(options.billing).trim().toLowerCase())) {
+    return {
+      option: "billing",
+      message: "Invalid billing period. Use monthly or yearly."
+    };
+  }
+
+  return null;
+}
+
+function accountSigninUrl(options = {}) {
+  const base = `${apiBaseUrl(options)}/`;
+  const provider = normalizeSigninProvider(options.provider);
+  const plan = normalizeSigninPlan(options.plan);
+  const billing = normalizeSigninBilling(options.billing);
+  const pathName = provider && plan ? `/api/auth/${provider}/start` : "/signup";
+  const url = new URL(pathName, base);
+
+  if (plan) url.searchParams.set("plan", plan);
+  if (billing) url.searchParams.set("billing", billing);
+  if (provider && !plan) url.searchParams.set("auth_hint", provider);
+  url.searchParams.set("source", "cli");
+
+  return {
+    url: url.toString(),
+    provider,
+    planKey: plan,
+    billingPeriod: billing
+  };
+}
+
+function shouldOpenBrowser(options = {}) {
+  if (options.browser === true) return true;
+  if (options.browser === false) return false;
+  return !isCiEnvironment();
+}
+
+function openBrowserUrl(url) {
+  try {
+    const platform = process.platform;
+    const command = platform === "darwin" ? "open" : platform === "win32" ? "cmd" : "xdg-open";
+    const args = platform === "win32" ? ["/c", "start", "", url] : [url];
+    const child = spawn(command, args, {
+      detached: true,
+      stdio: "ignore"
+    });
+    child.on("error", () => {
+      // Browser opening is best-effort and must not break the sign-in flow.
+    });
+    child.unref();
+    return { opened: true };
+  } catch (error) {
+    return {
+      opened: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+function savePendingBrowserSignin(pending) {
+  const config = readConfig();
+  writeConfig({
+    ...config,
+    browserSignin: pending
+  });
+}
+
+function pendingBrowserSignin() {
+  const pending = readConfig().browserSignin;
+  if (!pending || typeof pending !== "object") return null;
+  if (!pending.url || !pending.startedAt) return null;
+  return pending;
 }
 
 async function verifyApiKey(apiKey, options = {}) {
@@ -1248,6 +1368,73 @@ function syncPayload(targetDir, options, readiness) {
   return payload;
 }
 
+function safeJsonParse(value) {
+  const text = String(value || "").trim();
+  if (!text) return {};
+
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function normalizeMemoryKind(value) {
+  const normalized = String(value || "command")
+    .trim()
+    .toLowerCase()
+    .replace(/[-\s]+/g, "_");
+  const allowed = new Set([
+    "command",
+    "failure",
+    "deployment",
+    "decision",
+    "rag_eval",
+    "conversation",
+    "production_check"
+  ]);
+
+  return allowed.has(normalized) ? normalized : "command";
+}
+
+function memoryPayload(targetDir, options) {
+  const rootDir = path.resolve(targetDir || ".");
+  const git = gitHead(rootDir);
+  const kind = normalizeMemoryKind(options.kind);
+  const metadata = safeJsonParse(options.metadataJson);
+
+  return compactObject({
+    kind,
+    projectName: projectName(rootDir),
+    repoRemote: options.includeRemote ? gitRemote(rootDir) : null,
+    gitBranch: git.branch || null,
+    gitCommit: git.commit || null,
+    title: options.title || `${kind.replace(/_/g, " ")} record`,
+    summary: options.summary || null,
+    status: options.status || (kind === "failure" ? "failed" : "recorded"),
+    commandText: options.commandText || null,
+    cwd: path.relative(rootDir, process.cwd()) || ".",
+    exitCode: options.exitCode,
+    durationMs: options.durationMs,
+    errorText: options.errorText || null,
+    rootCause: options.rootCause || null,
+    fixSummary: options.fixSummary || null,
+    deploymentTarget: options.deploymentTarget || null,
+    deploymentUrl: options.deploymentUrl || null,
+    verificationStatus: options.verificationStatus || null,
+    decision: options.decision || null,
+    rationale: options.rationale || null,
+    evalScore: options.evalScore,
+    evalPassing: options.evalPassing,
+    evalTotal: options.evalTotal,
+    occurredAt: new Date().toISOString(),
+    packageName: "@aimlsuperagent/agent",
+    packageVersion: packageVersion(),
+    metadata
+  });
+}
+
 async function syncProject(apiKey, payload, options = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), apiTimeoutMs());
@@ -1295,6 +1482,53 @@ async function syncProject(apiKey, payload, options = {}) {
   }
 }
 
+async function recordMemoryEvent(apiKey, payload, options = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), apiTimeoutMs());
+
+  try {
+    const response = await globalThis.fetch(memoryEventsEndpoint(options), {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+        "user-agent": `aiml-superagent/${packageVersion()} node/${process.version}`
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+
+    let responseBody = {};
+    try {
+      responseBody = await response.json();
+    } catch {
+      responseBody = {};
+    }
+
+    if (!response.ok || responseBody.ok !== true) {
+      return {
+        ok: false,
+        status: response.status,
+        reason: responseBody.reason || `http-${response.status}`
+      };
+    }
+
+    return {
+      ok: true,
+      status: response.status,
+      ...responseBody
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error?.name === "AbortError" ? "memory-timeout" : "memory-request-failed",
+      error: error instanceof Error ? error.message : String(error)
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function parseArgs(argv) {
   const args = [...argv];
   const options = {
@@ -1307,7 +1541,30 @@ function parseArgs(argv) {
     apiKey: null,
     apiBaseUrl: null,
     output: null,
-    feature: null
+    feature: null,
+    provider: null,
+    plan: null,
+    billing: null,
+    browser: null,
+    kind: null,
+    title: null,
+    summary: null,
+    status: null,
+    commandText: null,
+    exitCode: null,
+    durationMs: null,
+    errorText: null,
+    rootCause: null,
+    fixSummary: null,
+    deploymentTarget: null,
+    deploymentUrl: null,
+    verificationStatus: null,
+    decision: null,
+    rationale: null,
+    evalScore: null,
+    evalPassing: null,
+    evalTotal: null,
+    metadataJson: null
   };
   const positionals = [];
 
@@ -1328,6 +1585,10 @@ function parseArgs(argv) {
       options.analytics = true;
     } else if (arg === "--no-analytics") {
       options.analytics = false;
+    } else if (arg === "--browser") {
+      options.browser = true;
+    } else if (arg === "--no-browser") {
+      options.browser = false;
     } else if (arg === "--key") {
       options.apiKey = args[index + 1] || "";
       index += 1;
@@ -1350,6 +1611,118 @@ function parseArgs(argv) {
       index += 1;
     } else if (arg.startsWith("--feature=")) {
       options.feature = arg.slice("--feature=".length);
+    } else if (arg === "--provider") {
+      options.provider = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--provider=")) {
+      options.provider = arg.slice("--provider=".length);
+    } else if (arg === "--plan") {
+      options.plan = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--plan=")) {
+      options.plan = arg.slice("--plan=".length);
+    } else if (arg === "--billing") {
+      options.billing = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--billing=")) {
+      options.billing = arg.slice("--billing=".length);
+    } else if (arg === "--kind") {
+      options.kind = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--kind=")) {
+      options.kind = arg.slice("--kind=".length);
+    } else if (arg === "--title") {
+      options.title = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--title=")) {
+      options.title = arg.slice("--title=".length);
+    } else if (arg === "--summary") {
+      options.summary = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--summary=")) {
+      options.summary = arg.slice("--summary=".length);
+    } else if (arg === "--status") {
+      options.status = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--status=")) {
+      options.status = arg.slice("--status=".length);
+    } else if (arg === "--command-text" || arg === "--command") {
+      options.commandText = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--command-text=")) {
+      options.commandText = arg.slice("--command-text=".length);
+    } else if (arg.startsWith("--command=")) {
+      options.commandText = arg.slice("--command=".length);
+    } else if (arg === "--exit-code") {
+      options.exitCode = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--exit-code=")) {
+      options.exitCode = arg.slice("--exit-code=".length);
+    } else if (arg === "--duration-ms") {
+      options.durationMs = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--duration-ms=")) {
+      options.durationMs = arg.slice("--duration-ms=".length);
+    } else if (arg === "--error") {
+      options.errorText = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--error=")) {
+      options.errorText = arg.slice("--error=".length);
+    } else if (arg === "--root-cause") {
+      options.rootCause = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--root-cause=")) {
+      options.rootCause = arg.slice("--root-cause=".length);
+    } else if (arg === "--fix") {
+      options.fixSummary = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--fix=")) {
+      options.fixSummary = arg.slice("--fix=".length);
+    } else if (arg === "--deployment-target") {
+      options.deploymentTarget = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--deployment-target=")) {
+      options.deploymentTarget = arg.slice("--deployment-target=".length);
+    } else if (arg === "--deployment-url") {
+      options.deploymentUrl = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--deployment-url=")) {
+      options.deploymentUrl = arg.slice("--deployment-url=".length);
+    } else if (arg === "--verification-status") {
+      options.verificationStatus = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--verification-status=")) {
+      options.verificationStatus = arg.slice("--verification-status=".length);
+    } else if (arg === "--decision") {
+      options.decision = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--decision=")) {
+      options.decision = arg.slice("--decision=".length);
+    } else if (arg === "--rationale") {
+      options.rationale = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--rationale=")) {
+      options.rationale = arg.slice("--rationale=".length);
+    } else if (arg === "--score") {
+      options.evalScore = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--score=")) {
+      options.evalScore = arg.slice("--score=".length);
+    } else if (arg === "--passing") {
+      options.evalPassing = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--passing=")) {
+      options.evalPassing = arg.slice("--passing=".length);
+    } else if (arg === "--total") {
+      options.evalTotal = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--total=")) {
+      options.evalTotal = arg.slice("--total=".length);
+    } else if (arg === "--metadata-json") {
+      options.metadataJson = args[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--metadata-json=")) {
+      options.metadataJson = arg.slice("--metadata-json=".length);
     } else {
       positionals.push(arg);
     }
@@ -1504,6 +1877,128 @@ async function main() {
       exitCode,
       durationMs: Date.now() - startedAt,
       readiness
+    });
+    return exitCode;
+  }
+
+  if (command === "signin" || command === "sign-in" || command === "account-login") {
+    const invalid = invalidSigninOption(options);
+    if (invalid) {
+      if (options.json) {
+        console.log(JSON.stringify({ error: "invalid-signin-option", ...invalid }, null, 2));
+      } else {
+        console.error(invalid.message);
+      }
+      const exitCode = 1;
+      await recordCliAnalytics(options, {
+        command: "signin",
+        exitCode,
+        durationMs: Date.now() - startedAt
+      });
+      return exitCode;
+    }
+
+    const signin = accountSigninUrl(options);
+    const openResult = shouldOpenBrowser(options)
+      ? openBrowserUrl(signin.url)
+      : { opened: false };
+    const pending = {
+      status: "pending-browser",
+      url: signin.url,
+      provider: signin.provider,
+      planKey: signin.planKey,
+      billingPeriod: signin.billingPeriod,
+      startedAt: new Date().toISOString(),
+      packageName: "@aimlsuperagent/agent",
+      packageVersion: packageVersion()
+    };
+    savePendingBrowserSignin(pending);
+
+    const payload = {
+      state: "pending-browser",
+      opened: Boolean(openResult.opened),
+      openError: openResult.error,
+      url: signin.url,
+      configPath: configPath(),
+      nextStep: "Complete checkout or sign-in in the browser, copy the issued API key, then run `aiml-superagent login <api-key>`."
+    };
+
+    if (options.json) {
+      console.log(JSON.stringify(payload, null, 2));
+    } else {
+      console.log("AiML SuperAgent browser sign-in started.");
+      console.log(`URL: ${signin.url}`);
+      console.log(`Browser opened: ${payload.opened ? "yes" : "no"}`);
+      if (payload.openError) console.log(`Browser open error: ${payload.openError}`);
+      console.log("Next: complete checkout/sign-in, copy the issued API key, then run:");
+      console.log("  aiml-superagent login <api-key>");
+      console.log("Check local auth state with:");
+      console.log("  aiml-superagent signin-check");
+    }
+
+    const exitCode = 0;
+    await recordCliAnalytics(options, {
+      command: "signin",
+      exitCode,
+      durationMs: Date.now() - startedAt
+    });
+    return exitCode;
+  }
+
+  if (command === "signin-check" || command === "sign-in-check" || command === "account-check") {
+    const status = await licenseStatus({
+      ...options,
+      featureKey: "browser_signin_check",
+      commandName: "signin-check"
+    });
+    const pending = pendingBrowserSignin();
+
+    if (status.valid) {
+      const payload = {
+        state: "signed-in",
+        license: status
+      };
+      if (options.json) {
+        console.log(JSON.stringify(payload, null, 2));
+      } else {
+        console.log("AiML SuperAgent account: signed in");
+        printLicenseStatus(status, false);
+      }
+      const exitCode = 0;
+      await recordCliAnalytics(options, {
+        command: "signin-check",
+        exitCode,
+        durationMs: Date.now() - startedAt
+      });
+      return exitCode;
+    }
+
+    const state = pending ? "pending-browser" : status.mode === "unverified" ? "invalid-key" : "not-signed-in";
+    const payload = {
+      state,
+      license: status,
+      pendingBrowserSignin: pending,
+      nextStep: pending
+        ? "Complete the browser flow, copy the issued API key, then run `aiml-superagent login <api-key>`."
+        : "Run `aiml-superagent signin` to open the account flow, or `aiml-superagent login <api-key>` if you already have a key."
+    };
+
+    if (options.json) {
+      console.log(JSON.stringify(payload, null, 2));
+    } else {
+      console.log(`AiML SuperAgent account: ${state}`);
+      if (pending) {
+        console.log(`Pending URL: ${pending.url}`);
+        console.log(`Started: ${pending.startedAt}`);
+      }
+      console.log(payload.nextStep);
+    }
+
+    const exitCode = 1;
+    await recordCliAnalytics(options, {
+      command: "signin-check",
+      exitCode,
+      durationMs: Date.now() - startedAt
     });
     return exitCode;
   }
@@ -1890,6 +2385,34 @@ async function main() {
 
     const exitCode = response.ok ? 0 : 1;
     await recordCliAnalytics(options, { command, exitCode, durationMs: Date.now() - startedAt, readiness });
+    return exitCode;
+  }
+
+  if (command === "memory" || command === "record") {
+    const resolved = resolveApiKey(options);
+    if (!resolved.apiKey) {
+      const freeLicense = await licenseStatus(options);
+      printPaidRequired("memory", freeLicense, options.json);
+      const exitCode = 1;
+      await recordCliAnalytics(options, { command, exitCode, durationMs: Date.now() - startedAt });
+      return exitCode;
+    }
+
+    const targetDir = path.resolve(targetArg || ".");
+    const payload = memoryPayload(targetDir, options);
+    const response = await recordMemoryEvent(resolved.apiKey, payload, options);
+
+    if (options.json) {
+      console.log(JSON.stringify({ request: payload, response }, null, 2));
+    } else if (response.ok) {
+      console.log(`Operating memory recorded: ${response.publicId || "ok"}`);
+      console.log(`Kind: ${response.kind || payload.kind}`);
+    } else {
+      console.error(`Operating memory record failed: ${response.reason || "unknown"}`);
+    }
+
+    const exitCode = response.ok ? 0 : 1;
+    await recordCliAnalytics(options, { command, exitCode, durationMs: Date.now() - startedAt });
     return exitCode;
   }
 

@@ -34,6 +34,7 @@ Use `CLAUDE.md` for behavior. Use AiML SuperAgent for project operation.
 AiML SuperAgent now connects the public package, paid CLI, website checkout, and API-key verification flow:
 
 - Free repo setup with `init` and `check`
+- Browser account sign-in helper with `signin` and `signin-check`
 - Paid API-key login with `login`, `status`, `logout`, and `upgrade`
 - Paid `doctor` command for readiness checks and release-aware proof
 - Premium commands for `doctor --deep`, `sync`, `env-audit`, `context-report`, `ci`, `incident`, `handoff`, `deploy-proof`, and `usage`
@@ -173,6 +174,8 @@ npx @aimlsuperagent/agent check .
 Paid commands use an AiML SuperAgent API key from `aimlsuperagent.com`.
 
 ```bash
+aiml-superagent signin --provider google --plan core
+aiml-superagent signin-check
 aiml-superagent login <api-key>
 aiml-superagent status
 aiml-superagent doctor .
@@ -180,6 +183,7 @@ aiml-superagent doctor . --deep
 aiml-superagent env-audit .
 aiml-superagent context-report .
 aiml-superagent handoff .
+aiml-superagent memory . --kind command --title "Build passed" --command-text "npm run build" --status success
 ```
 
 Use environment variables instead of local key storage in CI:
@@ -191,6 +195,12 @@ AIML_SUPERAGENT_API_KEY=aiml_live_xxx aiml-superagent doctor .
 `doctor` is the first paid-only command. It verifies the API key, runs the readiness checks, and reports paid-feature availability without sending file contents, notes, source code, repo names, paths, or secrets.
 
 Paid verification increments server-side API key usage and records bounded feature events such as `license_login`, `license_status`, and `doctor`.
+
+Paid Project Operating Memory records the high-signal build history that makes
+future agent sessions stronger: commands that passed or failed, failure patterns
+and fixes, deployment proof, durable decisions, production checks, and RAG eval
+results. It is intentionally summary-first: do not upload secrets, env values,
+raw private notes, or full source dumps.
 
 See [docs/14-paid-cli.md](docs/14-paid-cli.md).
 
